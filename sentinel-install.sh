@@ -24,6 +24,120 @@ function format:color() {
     WHITE='\033[1;37m'
 }
 
+function tools:depedency() {
+    apt-get update -y
+    apt-get install \
+        ca-certificates \
+        curl \
+        gnupg \
+        lsb-release -y
+    mkdir -p /etc/apt/keyrings
+    if [ -f /etc/apt/keyrings/docker.gpg ]; then
+        echo "GPG Available"
+    else
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+    fi
+    if [ -f /etc/apt/sources.list.d/docker.list ]; then
+        echo "Directory Already Created"
+    else
+        echo \
+        "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+        $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+    fi
+    apt-get update -y
+    apt-get install telegraf acl htop wget tcpdump jq python3-pip lsof qrencode wireguard-tools bind9-dnsutils telnet unzip docker-compose zsh docker-ce docker-ce-cli containerd.io docker-compose-plugin git ufw -y
+}
+
+function create:user() {
+    mkdir -p ${HOME_NODE}
+    groupadd admin
+    useradd -m -d ${HOME_NODE} -G admin,docker -U -s /bin/bash ${USER}
+}
+
+function setup:dvpn() {
+    sudo -u ${USER} bash -c 'docker pull ghcr.io/sentinel-official/dvpn-node:latest'
+    sudo -u ${USER} bash -c 'docker tag ghcr.io/sentinel-official/dvpn-node:latest sentinel-dvpn-node'
+    sudo -u ${USER} bash -c 'docker run --rm \
+                                     --volume '${HOME_NODE}'/.sentinelnode:/root/.sentinelnode \
+                                     sentinel-dvpn-node process config init'
+    sudo -u ${USER} bash -c 'docker run --rm \
+                                    --volume '${HOME_NODE}'/.sentinelnode:/root/.sentinelnode \
+                                    sentinel-dvpn-node process wireguard config init'
+}
+
+function setup:certificates() {
+    COUNTRY=$(curl -s http://ip-api.com/json/${IP_PUBLIC}| jq -r ".countryCode") 
+    STATE=$(curl -s http://ip-api.com/json/${IP_PUBLIC}| jq -r ".country") 
+    CITY=$(curl -s http://ip-api.com/json/${IP_PUBLIC}| jq -r ".city") 
+    ORGANIZATION="Sentinel DVPN"
+    ORGANIZATION_UNIT="IT Department"
+
+    openssl req -new -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -x509 -sha256 -days 365 -nodes \
+            -keyout ${HOME_NODE}/.sentinelnode/tls.key \
+            -out ${HOME_NODE}/.sentinelnode/tls.crt \
+            -subj "/C=${COUNTRY}/ST=${STATE}/L=${CITY}/O=${ORGANIZATION}/OU=${ORGANIZATION_UNIT}/CN=."
+    chown root:root ${HOME_NODE}/.sentinelnode
+}
+
+function wallet:creation() {
+    if [ "${WALLET_IMPORT_ENABLE}" == "true" ]; then
+        sudo -u ${USER} bash -c 'docker run --rm \
+                                    --interactive \
+                                    --tty \
+                                    --volume '${HOME_NODE}'/.sentinelnode:/root/.sentinelnode \
+                                    sentinel-dvpn-node process keys add  --recover'
+    else
+        sudo -u ${USER} bash -c 'docker run --rm \
+                                    --interactive \
+                                    --tty \
+                                    --volume '${HOME_NODE}'/.sentinelnode:/root/.sentinelnode \
+                                    sentinel-dvpn-node process keys add' > /tmp/wallet.txt
+    fi
+}
+
+function run:wireguard() {
+    GET_PORT_WIREGUARD=$(cat ${HOME_NODE}/.sentinelnode/wireguard.toml | grep listen_port | awk -F"=" '{print $2}' | sed "s/ //")
+    sudo -u ${USER} bash -c 'docker run -d \
+        --name sentinel-dvpn-node \
+        --restart unless-stopped \
+        --volume '${HOME_NODE}'/.sentinelnode:/root/.sentinelnode \
+        --volume /lib/modules:/lib/modules \
+        --cap-drop ALL \
+        --cap-add NET_ADMIN \
+        --cap-add NET_BIND_SERVICE \
+        --cap-add NET_RAW \
+        --cap-add SYS_MODULE \
+        --sysctl net.ipv4.ip_forward=1 \
+        --sysctl net.ipv6.conf.all.disable_ipv6=0 \
+        --sysctl net.ipv6.conf.all.forwarding=1 \
+        --sysctl net.ipv6.conf.default.forwarding=1 \
+        --publish '${GET_PORT_WIREGUARD}':'${GET_PORT_WIREGUARD}'/udp \
+        --publish 15363:15363/tcp \
+        sentinel-dvpn-node process start'
+}
+
+function get:informations() {
+    if [ "${WALLET_IMPORT_ENABLE}" == "false" ]; then
+        clear
+        echo ""
+        echo -e "\e[106m   \e[49m\e[105m   \e[103m   \e[102m   \e[101m   \e[46m    \e[43m    \e[97m\e[44m\e[1m   SENTINEL NODE INFORMATIONS  \e[0m"
+        echo "Save your Seeds and Dont Lose, Your seed is your asset"
+        echo -e "${GREEN}SEED:${NOCOLOR}"
+        SEED_KEY=$(cat /tmp/wallet.txt | grep -v "^*" | head -n1)
+        echo -e "${RED}${SEED_KEY}${NOCOLOR}"
+        echo ""
+        NODE_ADDRESS=$(cat /tmp/wallet.txt | grep operator | awk '{print $2}')
+        WALLET_ADDRESS=$(cat /tmp/wallet.txt | grep operator | awk '{print $3}')
+        WALLET_NAME=$(cat /tmp/wallet.txt | grep operator | awk '{print $1}')
+        echo -e "${GREEN}Your Node Address :${NOCOLOR} ${RED}${NODE_ADDRESS}${NOCOLOR}"
+        echo -e "${GREEN}Your Wallet Address :${NOCOLOR} ${RED}${NODE_ADDRESS}${NOCOLOR}"
+        echo -e "${GREEN}Your Wallet Name :${NOCOLOR} ${RED}${WALLET_NAME}${NOCOLOR}"
+        echo ""
+        echo "Please send 50 dVPN for activation to your wallet ${WALLET_ADDRESS}"
+        echo -e "restart service after sent balance with command ${GREEN}docker restart sentinel-dvpn-node${NOCOLOR}"
+    fi
+}
+
 function print_banner() {
     clear
     echo -e "${BLUE}╔════════════════════════════════════════╗${NOCOLOR}"
