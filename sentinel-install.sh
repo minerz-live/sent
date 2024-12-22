@@ -261,6 +261,30 @@ function install_node() {
     get:informations
 }
 
+function check_status() {
+    log "Checking node status"
+    if docker ps | grep -q sentinel-dvpn-node; then
+        echo -e "${GREEN}Node Status: Running${NOCOLOR}"
+        
+        # Get container info
+        echo -e "\n${BLUE}Container Information:${NOCOLOR}"
+        docker ps --filter name=sentinel-dvpn-node --format "ID: {{.ID}}\nStatus: {{.Status}}\nPorts: {{.Ports}}"
+        
+        # Get node API status
+        echo -e "\n${BLUE}Node API Status:${NOCOLOR}"
+        curl -sk https://localhost:15363/status | jq '.'
+        
+        # Show connected peers
+        echo -e "\n${BLUE}Connected Peers:${NOCOLOR}"
+        curl -sk https://localhost:15363/status/peers | jq '.'
+    else
+        echo -e "${RED}Node Status: Not Running${NOCOLOR}"
+    fi
+    
+    # Press enter to continue
+    read -p "Press Enter to continue..."
+}
+
 function main() {
     if [[ $(/usr/bin/id -u) -ne 0 ]]; then
         echo "Aborting: run as root user!"
