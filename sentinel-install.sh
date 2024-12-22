@@ -20,15 +20,19 @@ function echo:error() {
     exit 1
 }
 
-# Check if the script is run as root
+# Check if the script is being run as root
 if [[ $(/usr/bin/id -u) -ne 0 ]]; then
-    echo:error "Run this script as the root user!"
+    echo "Aborting: run as root user!"
+    exit 1
 fi
 
-# Prompt for moniker
-read -rp "Enter the moniker for your node: " MONIKER
-if [[ -z "$MONIKER" ]]; then
-    echo:error "Moniker cannot be empty. Please rerun the script and provide a valid moniker."
+# Prompt the user for the moniker
+read -p "Enter the moniker for your node: " MONIKER
+
+# Ensure the moniker is not empty
+if [ -z "$MONIKER" ]; then
+    echo "[ERROR] Moniker cannot be empty. Please rerun the script and provide a valid moniker."
+    exit 1
 fi
 
 # Variables
