@@ -9,6 +9,13 @@ HOME_NODE="${HOME_STAGE}/${USER}"
 MONIKER=""
 WALLET_IMPORT_ENABLE="true"
 
+# Default pricing configuration
+CLOUD_GB_PRICES="52573ibc/31FEE1A2A9F9C01113F90BD0BBCCE8FD6BBB8585FAF109A2101827DD1D5B95B8,9204ibc/A8C2D23A1E6F95DA4E48BA349667E322BD7A6C996D8A4AAE8BA72E190F3D1477,1180852ibc/B1C0DDB14F25279A2026BC8794E12B259F8BDA546A3C5132CCAEE4431CE36783,122740ibc/ED07A3391A112B175915CD8FAF43A2DA8E4790EDE12566649D0C2F97716B8518,15342624udvpn"
+CLOUD_HOURLY_PRICES="18480ibc/31FEE1A2A9F9C01113F90BD0BBCCE8FD6BBB8585FAF109A2101827DD1D5B95B8,770ibc/A8C2D23A1E6F95DA4E48BA349667E322BD7A6C996D8A4AAE8BA72E190F3D1477,1871892ibc/B1C0DDB14F25279A2026BC8794E12B259F8BDA546A3C5132CCAEE4431CE36783,18897ibc/ED07A3391A112B175915CD8FAF43A2DA8E4790EDE12566649D0C2F97716B8518,7600000udvpn"
+
+RESIDENTIAL_GB_PRICES="52573ibc/31FEE1A2A9F9C01113F90BD0BBCCE8FD6BBB8585FAF109A2101827DD1D5B95B8,9204ibc/A8C2D23A1E6F95DA4E48BA349667E322BD7A6C996D8A4AAE8BA72E190F3D1477,1180852ibc/B1C0DDB14F25279A2026BC8794E12B259F8BDA546A3C5132CCAEE4431CE36783,122740ibc/ED07A3391A112B175915CD8FAF43A2DA8E4790EDE12566649D0C2F97716B8518,15342624udvpn"
+RESIDENTIAL_HOURLY_PRICES="18480ibc/31FEE1A2A9F9C01113F90BD0BBCCE8FD6BBB8585FAF109A2101827DD1D5B95B8,770ibc/A8C2D23A1E6F95DA4E48BA349667E322BD7A6C996D8A4AAE8BA72E190F3D1477,1871892ibc/B1C0DDB14F25279A2026BC8794E12B259F8BDA546A3C5132CCAEE4431CE36783,18897ibc/ED07A3391A112B175915CD8FAF43A2DA8E4790EDE12566649D0C2F97716B8518,15000000udvpn"
+
 # Log file
 LOG_FILE="/var/log/sentinel_dvpn_install.log"
 
@@ -117,11 +124,12 @@ function setup:config() {
     # Set Moniker Node
     sed -i 's/moniker = "[^"]*"/moniker = "'"${MONIKER}"'"/' ${HOME_NODE}/.sentinelnode/config.toml
 
+
     # Update GAS
-    sed -i -e 's|^gigabyte_prices *=.*|gigabyte_prices = "52573ibc/31FEE1A2A9F9C01113F90BD0BBCCE8FD6BBB8585FAF109A2101827DD1D5B95B8,9204ibc/A8C2D23A1E6F95DA4E48BA349667E322BD7A6C996D8A4AAE8BA72E190F3D1477,1180852ibc/B1C0DDB14F25279A2026BC8794E12B259F8BDA546A3C5132CCAEE4431CE36783,122740ibc/ED07A3391A112B175915CD8FAF43A2DA8E4790EDE12566649D0C2F97716B8518,15342624udvpn"|' ${HOME_NODE}/.sentinelnode/config.toml 
-    sed -i -e 's|^hourly_prices *=.*|hourly_prices = "18480ibc/31FEE1A2A9F9C01113F90BD0BBCCE8FD6BBB8585FAF109A2101827DD1D5B95B8,770ibc/A8C2D23A1E6F95DA4E48BA349667E322BD7A6C996D8A4AAE8BA72E190F3D1477,1871892ibc/B1C0DDB14F25279A2026BC8794E12B259F8BDA546A3C5132CCAEE4431CE36783,18897ibc/ED07A3391A112B175915CD8FAF43A2DA8E4790EDE12566649D0C2F97716B8518,4160000udvpn"|' ${HOME_NODE}/.sentinelnode/config.toml
+    sed -i -e 's|^gigabyte_prices *=.*|gigabyte_prices = "'"${GB_PRICES}"'"|' ${HOME_NODE}/.sentinelnode/config.toml 
+    sed -i -e 's|^hourly_prices *=.*|hourly_prices = "'"${HOURLY_PRICES}"'"|' ${HOME_NODE}/.sentinelnode/config.toml
     
-    # Change User Permissions
+        # Change User Permissions
     setfacl -m u:${USER}:rwx -R ${HOME_NODE}/.sentinelnode
 
     # Change wireguard port
@@ -153,6 +161,7 @@ function run:wireguard() {
 function wallet:creation() {
     log "Creating wallet"
     if [ "${WALLET_IMPORT_ENABLE}" == "true" ]; then
+        echo "Please enter your mnemonic seed phrase when prompted."
         sudo -u ${USER} bash -c 'docker run --rm \
                                     --interactive \
                                     --tty \
@@ -167,42 +176,39 @@ function wallet:creation() {
     fi
 }
 
-function get:informations() {
-    if [ "${WALLET_IMPORT_ENABLE}" == "false" ]; then
-        clear
-        echo ""
-        echo -e "\e[106m   \e[49m\e[105m   \e[103m   \e[102m   \e[101m   \e[46m    \e[43m    \e[97m\e[44m\e[1m   SENTINEL NODE INFORMATIONS  \e[0m"
-        echo "Save your Seeds and Don't Lose, Your seed is your asset"
-        echo -e "${GREEN}SEED:${NOCOLOR}"
-        SEED_KEY=$(cat ${HOME_NODE}/.sentinelnode/wallet.txt | grep -v "^*" | head -n1)
-        echo -e "${RED}${SEED_KEY}${NOCOLOR}"
-        echo ""
-        NODE_ADDRESS=$(cat ${HOME_NODE}/.sentinelnode/wallet.txt | grep operator | awk '{print $2}')
-        WALLET_ADDRESS=$(cat ${HOME_NODE}/.sentinelnode/wallet.txt | grep operator | awk '{print $3}')
-        WALLET_NAME=$(cat ${HOME_NODE}/.sentinelnode/wallet.txt | grep operator | awk '{print $1}')
-        echo -e "${GREEN}Your Node Address :${NOCOLOR} ${RED}${NODE_ADDRESS}${NOCOLOR}"
-        echo -e "${GREEN}Your Wallet Address :${NOCOLOR} ${RED}${WALLET_ADDRESS}${NOCOLOR}"
-        echo -e "${GREEN}Your Wallet Name :${NOCOLOR} ${RED}${WALLET_NAME}${NOCOLOR}"
-        echo ""
-        echo "Please send 50 dVPN for activation to your wallet ${WALLET_ADDRESS}"
-        echo -e "restart service after sent balance with command ${GREEN}docker restart sentinel-dvpn-node${NOCOLOR}"
-    fi
-}
+function install_node() {
+    check_connectivity
+    tools:dependency
+    create:user
+    setup:dvpn
+    setup:certificates
+    
+    # Prompt for server type
+    echo "Select server type:"
+    echo "1) Cloud Server"
+    echo "2) Residential Server"
+    read -p "Enter your choice (1 or 2): " server_type
 
-function setup:firewall() {
-    log "Setting up firewall"
-    ufw allow 22/tcp
-    ufw allow 51647/udp
-    ufw allow 15363/tcp
-    ufw --force enable
-}
+    case $server_type in
+        1)
+            GB_PRICES=$CLOUD_GB_PRICES
+            HOURLY_PRICES=$CLOUD_HOURLY_PRICES
+            ;;
+        2)
+            GB_PRICES=$RESIDENTIAL_GB_PRICES
+            HOURLY_PRICES=$RESIDENTIAL_HOURLY_PRICES
+            ;;
+        *)
+            echo "Invalid choice. Exiting."
+            exit 1
+            ;;
+    esac
 
-function check_status() {
-    if docker ps | grep -q sentinel-dvpn-node; then
-        echo "Sentinel DVPN node is running."
-    else
-        echo "Sentinel DVPN node is not running."
-    fi
+    setup:config
+    wallet:creation
+    run:wireguard
+    setup:firewall
+    get:informations
 }
 
 function main() {
@@ -226,16 +232,7 @@ function main() {
 
         case $choice in
             1)
-                check_connectivity
-                tools:dependency
-                create:user
-                setup:dvpn
-                setup:certificates
-                setup:config
-                wallet:creation
-                run:wireguard
-                setup:firewall
-                get:informations
+                install_node
                 ;;
             2)
                 check_status
