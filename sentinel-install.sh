@@ -1,116 +1,177 @@
 #!/bin/bash
 
-# Function for formatted colored output
-function format:color() {
-    NOCOLOR='\033[0m'
-    RED='\033[0;31m'
-    GREEN='\033[0;32m'
-    ORANGE='\033[0;33m'
-    BLUE='\033[0;34m'
-    CYAN='\033[0;36m'
+# Colors for output
+RED="\033[0;31m"
+GREEN="\033[0;32m"
+YELLOW="\033[0;33m"
+CYAN="\033[0;36m"
+RESET="\033[0m"
+
+# Sentinel repository
+REPO="https://github.com/sentinel-official/sentinel"
+
+# Display menu
+show_menu() {
+  echo -e "${CYAN}Sentinel dVPN Node Manager${RESET}"
+  echo "1) Install Sentinel dVPN Node"
+  echo "2) Restart Node"
+  echo "3) Stop Node"
+  echo "4) View Logs"
+  echo "5) Remove Node"
+  echo "6) Wallet Management"
+  echo "7) Update Configuration"
+  echo "8) Exit"
 }
 
-# Function for displaying messages
-function echo:info() {
-    echo -e "${CYAN}[INFO]${NOCOLOR} $1"
+# Install Sentinel dVPN Node
+install_node() {
+  echo -e "${GREEN}Installing Sentinel dVPN Node...${RESET}"
+
+  # Update and install dependencies
+  sudo apt update && sudo apt upgrade -y
+  sudo apt install -y git make gcc jq docker.io docker-compose
+
+  # Clone repository and set up node
+  if [ ! -d "sentinel" ]; then
+    git clone $REPO
+  fi
+  cd sentinel
+  make install
+
+  # Set up Docker Compose
+  if [ ! -f "docker-compose.yml" ]; then
+    curl -O https://raw.githubusercontent.com/sentinel-official/sentinel/master/docker-compose.yml
+  fi
+
+  # Open necessary ports
+  echo -e "${YELLOW}Configuring firewall...${RESET}"
+  sudo ufw allow 80/tcp comment "http"
+  sudo ufw allow 443/tcp comment "http"
+  sudo ufw reload
+
+  # Start node
+  echo -e "${GREEN}Starting Sentinel node...${RESET}"
+  docker-compose up -d
+
+  echo -e "${GREEN}Installation complete!${RESET}"
 }
 
-function echo:error() {
-    echo -e "${RED}[ERROR]${NOCOLOR} $1"
-    exit 1
+# Restart the Sentinel node
+restart_node() {
+  echo -e "${YELLOW}Restarting Sentinel node...${RESET}"
+  docker-compose down
+  docker-compose up -d
+  echo -e "${GREEN}Node restarted successfully.${RESET}"
 }
 
-# Check if the script is being run as root
-if [[ $(/usr/bin/id -u) -ne 0 ]]; then
-    echo "Aborting: run as root user!"
-    exit 1
-fi
-
-# Prompt the user for the moniker
-read -p "Enter the moniker for your node: " MONIKER
-
-# Ensure the moniker is not empty
-if [ -z "$MONIKER" ]; then
-    echo "[ERROR] Moniker cannot be empty. Please rerun the script and provide a valid moniker."
-    exit 1
-fi
-
-# Variables
-USER="root"
-HOME_STAGE="/"
-HOME_NODE="${HOME_STAGE}/${USER}"
-WALLET_IMPORT_ENABLE="true"
-
-IP_PUBLIC=$(ip addr show $(ip route get 8.8.8.8 | grep -oP '(?<=dev )(\S+)') | grep inet | grep -v inet6 | awk '{print $2}' | awk -F"/" '{print $1}')
-
-# Install dependencies
-function tools:dependency() {
-    echo:info "Installing dependencies..."
-    apt-get update -y
-    apt-get install -y curl git openssl ca-certificates gnupg lsb-release jq ufw docker-compose
+# Stop the Sentinel node
+stop_node() {
+  echo -e "${YELLOW}Stopping Sentinel node...${RESET}"
+  docker-compose down
+  echo -e "${GREEN}Node stopped.${RESET}"
 }
 
-# Configure UFW
-function setup:firewall() {
-    echo:info "Configuring UFW rules..."
-    ufw allow 15363/tcp comment "sentinel-dvpn"
-    ufw allow 51647/udp comment "sentinel-dvpn"
+# View logs
+view_logs() {
+  echo -e "${YELLOW}Displaying Sentinel node logs...${RESET}"
+  docker-compose logs -f
 }
 
-# Setup and run Sentinel dVPN node
-function setup:node() {
-    echo:info "Setting up Sentinel dVPN node..."
-    mkdir -p "${HOME_NODE}/.sentinelnode"
-    docker pull ghcr.io/sentinel-official/dvpn-node:latest
-    docker tag ghcr.io/sentinel-official/dvpn-node:latest sentinel-dvpn-node
-    docker run --rm --volume "${HOME_NODE}/.sentinelnode:/root/.sentinelnode" sentinel-dvpn-node process config init
-    docker run --rm --volume "${HOME_NODE}/.sentinelnode:/root/.sentinelnode" sentinel-dvpn-node process wireguard config init
-
-    echo:info "Updating configuration..."
-    sed -i 's/backend = "[^"]*"/backend = "test"/' "${HOME_NODE}/.sentinelnode/config.toml"
-    sed -i 's/moniker = "[^"]*"/moniker = "'"${MONIKER}"'"/' "${HOME_NODE}/.sentinelnode/config.toml"
+# Remove Sentinel node
+remove_node() {
+  echo -e "${RED}Removing Sentinel node...${RESET}"
+  docker-compose down
+  cd ..
+  rm -rf sentinel
+  echo -e "${GREEN}Node removed successfully.${RESET}"
 }
 
-# Generate and apply TLS certificates
-function setup:certificates() {
-    echo:info "Generating TLS certificates..."
-    COUNTRY=$(curl -s http://ip-api.com/json/${IP_PUBLIC} | jq -r ".countryCode")
-    STATE=$(curl -s http://ip-api.com/json/${IP_PUBLIC} | jq -r ".country")
-    CITY=$(curl -s http://ip-api.com/json/${IP_PUBLIC} | jq -r ".city")
-    ORGANIZATION="Sentinel DVPN"
-    ORGANIZATION_UNIT="IT Department"
+# Wallet management
+wallet_management() {
+  echo -e "${CYAN}Wallet Management${RESET}"
+  echo "1) Create New Wallet"
+  echo "2) Recover Wallet"
+  echo "3) View Wallet Address"
+  echo "4) Exit"
 
-    openssl req -new -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -x509 -sha256 -days 365 -nodes -keyout "${HOME_NODE}/.sentinelnode/tls.key" -out "${HOME_NODE}/.sentinelnode/tls.crt" -subj "/C=${COUNTRY}/ST=${STATE}/L=${CITY}/O=${ORGANIZATION}/OU=${ORGANIZATION_UNIT}/CN=."
-    chown root:root "${HOME_NODE}/.sentinelnode"
+  read -p "Select an option: " wallet_choice
+  case $wallet_choice in
+    1)
+      echo -e "${YELLOW}Creating new wallet...${RESET}"
+      sentinelcli keys add dvpn_wallet
+      ;;
+    2)
+      echo -e "${YELLOW}Recovering wallet...${RESET}"
+      read -p "Enter your seed phrase: " seed_phrase
+      sentinelcli keys add dvpn_wallet --recover <<< "$seed_phrase"
+      ;;
+    3)
+      echo -e "${YELLOW}Fetching wallet address...${RESET}"
+      sentinelcli keys show dvpn_wallet -a
+      ;;
+    4)
+      return
+      ;;
+    *)
+      echo -e "${RED}Invalid choice.${RESET}"
+      ;;
+  esac
 }
 
-# Run the Sentinel dVPN node
-function run:node() {
-    echo:info "Starting Sentinel dVPN node..."
-    GET_PORT_WIREGUARD=$(cat "${HOME_NODE}/.sentinelnode/wireguard.toml" | grep listen_port | awk -F"=" '{print $2}' | sed "s/ //")
-    docker run -d --name sentinel-dvpn-node \
-        --restart unless-stopped \
-        --volume "${HOME_NODE}/.sentinelnode:/root/.sentinelnode" \
-        --volume /lib/modules:/lib/modules \
-        --cap-drop ALL \
-        --cap-add NET_ADMIN \
-        --cap-add NET_BIND_SERVICE \
-        --cap-add NET_RAW \
-        --cap-add SYS_MODULE \
-        --sysctl net.ipv4.ip_forward=1 \
-        --sysctl net.ipv6.conf.all.disable_ipv6=0 \
-        --sysctl net.ipv6.conf.all.forwarding=1 \
-        --sysctl net.ipv6.conf.default.forwarding=1 \
-        --publish "${GET_PORT_WIREGUARD}:${GET_PORT_WIREGUARD}/udp" \
-        --publish 15363:15363/tcp \
-        sentinel-dvpn-node process start
+# Update configuration
+update_config() {
+  echo -e "${CYAN}Updating Configuration${RESET}"
+
+  CONFIG_FILE="~/.sentinel/config/config.toml"
+
+  if [ -f "$CONFIG_FILE" ]; then
+    read -p "Enter Moniker: " moniker
+    sed -i "s/^moniker = .*/moniker = \"$moniker\"/" $CONFIG_FILE
+
+    read -p "Enter RPC address: " rpc_address
+    sed -i "s/^laddr = .*/laddr = \"$rpc_address\"/" $CONFIG_FILE
+
+    echo -e "${GREEN}Configuration updated.${RESET}"
+  else
+    echo -e "${RED}Configuration file not found.${RESET}"
+  fi
 }
 
-# Execute functions in sequence
-tools:dependency
-setup:firewall
-setup:node
-setup:certificates
-run:node
+# Main loop
+while true; do
+  show_menu
+  read -p "Enter your choice: " choice
 
-echo:info "Sentinel dVPN node setup complete. Use the following moniker for identification: ${MONIKER}"
+  case $choice in
+    1)
+      install_node
+      ;;
+    2)
+      restart_node
+      ;;
+    3)
+      stop_node
+      ;;
+    4)
+      view_logs
+      ;;
+    5)
+      remove_node
+      ;;
+    6)
+      wallet_management
+      ;;
+    7)
+      update_config
+      ;;
+    8)
+      echo -e "${CYAN}Exiting...${RESET}"
+      break
+      ;;
+    *)
+      echo -e "${RED}Invalid choice. Please try again.${RESET}"
+      ;;
+  esac
+
+  echo
+done
