@@ -7,7 +7,7 @@ HOME_NODE="${HOME_STAGE}/${USER}"
 
 ######## NODE ENVIRONMENT ####
 MONIKER=""
-WALLET_IMPORT_ENABLE="false"
+WALLET_IMPORT_ENABLE="true"
 
 # Log file
 LOG_FILE="/var/log/sentinel_dvpn_install.log"
