@@ -44,19 +44,13 @@ function check_connectivity() {
 
 function setup:firewall() {
     log "Setting up firewall"
-    # Allow SSH
-    ufw allow 22/tcp
+   
+    # Allow TCP-api port
+    ufw allow 15363/tcp comment "sentinel-dvpn"
+    # Allow UDP-WireGuard port
+    ufw allow 15363/tcp comment "sentinel-dvpn"
     
-    # Allow WireGuard port
-    GET_PORT_WIREGUARD=$(cat ${HOME_NODE}/.sentinelnode/wireguard.toml | grep listen_port | awk -F"=" '{print $2}' | sed "s/ //")
-    ufw allow ${GET_PORT_WIREGUARD}/udp
-    
-    # Allow API port
-    ufw allow 15363/tcp
-    
-    # Enable firewall
-    ufw --force enable
-    
+   
     log "Firewall setup completed"
 }
 
