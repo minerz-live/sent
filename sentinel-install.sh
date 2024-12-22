@@ -228,7 +228,7 @@ function install_node() {
     done
     
     # Prompt for server type
-    echo "Select server type:"
+    echo "Select where you're hosting the server:"
     echo "1) Cloud Server"
     echo "2) Residential Server"
     read -p "Enter your choice (1 or 2): " server_type
