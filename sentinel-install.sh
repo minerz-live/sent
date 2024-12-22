@@ -42,9 +42,30 @@ function check_connectivity() {
     fi
 }
 
+function setup:firewall() {
+    log "Setting up firewall"
+    # Allow SSH
+    ufw allow 22/tcp
+    
+    # Allow WireGuard port
+    GET_PORT_WIREGUARD=$(cat ${HOME_NODE}/.sentinelnode/wireguard.toml | grep listen_port | awk -F"=" '{print $2}' | sed "s/ //")
+    ufw allow ${GET_PORT_WIREGUARD}/udp
+    
+    # Allow API port
+    ufw allow 15363/tcp
+    
+    # Enable firewall
+    ufw --force enable
+    
+    log "Firewall setup completed"
+}
+
 function tools:dependency() {
     log "Starting dependency installation"
     apt-get update -y
+    # Install ACL first
+    apt-get install acl -y
+    
     apt-get install \
         ca-certificates \
         curl \
@@ -60,7 +81,7 @@ function tools:dependency() {
         $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
     fi
     apt-get update -y
-    apt-get install telegraf acl htop wget tcpdump jq python3-pip lsof qrencode wireguard-tools bind9-dnsutils telnet unzip docker-compose zsh docker-ce docker-ce-cli containerd.io docker-compose-plugin git ufw acl -y
+    apt-get install telegraf htop wget tcpdump jq python3-pip lsof qrencode wireguard-tools bind9-dnsutils telnet unzip docker-compose zsh docker-ce docker-ce-cli containerd.io docker-compose-plugin git ufw -y
     log "Dependency installation completed"
 }
 
@@ -130,7 +151,13 @@ function setup:config() {
     sed -i -e 's|^hourly_prices *=.*|hourly_prices = "'"${HOURLY_PRICES}"'"|' ${HOME_NODE}/.sentinelnode/config.toml
     
         # Change User Permissions
-    setfacl -m u:${USER}:rwx -R ${HOME_NODE}/.sentinelnode
+    if ! command -v setfacl &> /dev/null; then
+        echo "ACL not available, using chmod instead"
+        chmod -R 700 ${HOME_NODE}/.sentinelnode
+        chown -R ${USER}:${USER} ${HOME_NODE}/.sentinelnode
+    else
+        setfacl -m u:${USER}:rwx -R ${HOME_NODE}/.sentinelnode
+    fi
 
     # Change wireguard port
     sed -i -e 's|^listen_port *=.*|listen_port = "51647"|' ${HOME_NODE}/.sentinelnode/wireguard.toml 
@@ -175,6 +202,21 @@ function wallet:creation() {
             --volume ${HOME_NODE}/.sentinelnode:/root/.sentinelnode \
             sentinel-dvpn-node process keys add > ${HOME_NODE}/.sentinelnode/wallet.txt
     fi
+}
+
+function get:informations() {
+    log "Retrieving node information"
+    echo -e "\n${GREEN}Node Information:${NOCOLOR}"
+    echo -e "${BLUE}API Endpoint:${NOCOLOR} https://${IP_PUBLIC}:15363"
+    echo -e "${BLUE}WireGuard Port:${NOCOLOR} ${GET_PORT_WIREGUARD}"
+    
+    if [ -f "${HOME_NODE}/.sentinelnode/wallet.txt" ]; then
+        echo -e "\n${YELLOW}Wallet Information (saved in ${HOME_NODE}/.sentinelnode/wallet.txt):${NOCOLOR}"
+        cat ${HOME_NODE}/.sentinelnode/wallet.txt
+    fi
+    
+    echo -e "\n${GREEN}Node is running!${NOCOLOR}"
+    log "Installation completed successfully"
 }
 
 function install_node() {
