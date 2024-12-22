@@ -60,7 +60,7 @@ function tools:dependency() {
         $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
     fi
     apt-get update -y
-    apt-get install telegraf acl htop wget tcpdump jq python3-pip lsof qrencode wireguard-tools bind9-dnsutils telnet unzip docker-compose zsh docker-ce docker-ce-cli containerd.io docker-compose-plugin git ufw -y
+    apt-get install telegraf acl htop wget tcpdump jq python3-pip lsof qrencode wireguard-tools bind9-dnsutils telnet unzip docker-compose zsh docker-ce docker-ce-cli containerd.io docker-compose-plugin git ufw acl -y
     log "Dependency installation completed"
 }
 
@@ -161,18 +161,19 @@ function run:wireguard() {
 function wallet:creation() {
     log "Creating wallet"
     if [ "${WALLET_IMPORT_ENABLE}" == "true" ]; then
-        echo "Please enter your mnemonic seed phrase when prompted."
-        sudo -u ${USER} bash -c 'docker run --rm \
-                                    --interactive \
-                                    --tty \
-                                    --volume '${HOME_NODE}'/.sentinelnode:/root/.sentinelnode \
-                                    sentinel-dvpn-node process keys add  --recover'
+        echo "Please enter your mnemonic seed phrase:"
+        sudo -u ${USER} docker run --rm \
+            --interactive \
+            --tty \
+            --volume ${HOME_NODE}/.sentinelnode:/root/.sentinelnode \
+            sentinel-dvpn-node process keys add --recover
     else
-        sudo -u ${USER} bash -c 'docker run --rm \
-                                    --interactive \
-                                    --tty \
-                                    --volume '${HOME_NODE}'/.sentinelnode:/root/.sentinelnode \
-                                    sentinel-dvpn-node process keys add' > ${HOME_NODE}/.sentinelnode/wallet.txt
+        echo "Creating new wallet..."
+        sudo -u ${USER} docker run --rm \
+            --interactive \
+            --tty \
+            --volume ${HOME_NODE}/.sentinelnode:/root/.sentinelnode \
+            sentinel-dvpn-node process keys add > ${HOME_NODE}/.sentinelnode/wallet.txt
     fi
 }
 
@@ -182,6 +183,13 @@ function install_node() {
     create:user
     setup:dvpn
     setup:certificates
+	
+	# Prompt for moniker
+    read -p "Enter your node moniker (name): " MONIKER
+    while [[ -z "$MONIKER" ]]; do
+    echo "Moniker cannot be empty"
+    read -p "Enter your node moniker (name): " MONIKER
+    done
     
     # Prompt for server type
     echo "Select server type:"
