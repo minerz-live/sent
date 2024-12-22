@@ -266,17 +266,27 @@ function check_status() {
         
         # Get node API status
         echo -e "\n${BLUE}Node API Status:${NOCOLOR}"
-        curl -sk https://localhost:15363/status | jq '.'
+        if curl -sfk https://localhost:15363/status > /dev/null; then
+            curl -sk https://localhost:15363/status | jq '.'
+        else
+            echo -e "${RED}Error: Unable to fetch node status${NOCOLOR}"
+        fi
         
         # Show connected peers
         echo -e "\n${BLUE}Connected Peers:${NOCOLOR}"
-        curl -sk https://localhost:15363/status/peers | jq '.'
+        PEER_RESPONSE=$(curl -sfk https://localhost:15363/status/peers)
+        if [ $? -eq 0 ] && [ ! -z "$PEER_RESPONSE" ]; then
+            echo "$PEER_RESPONSE" | jq '.'
+        else
+            echo -e "${YELLOW}No peers currently connected${NOCOLOR}"
+        fi
     else
         echo -e "${RED}Node Status: Not Running${NOCOLOR}"
     fi
     
     # Press enter to continue
-    read -p "Press Enter to continue..."
+    echo -e "\nPress Enter to continue..."
+    read
 }
 
 function main() {
