@@ -48,7 +48,7 @@ function setup:firewall() {
     # Allow TCP-api port
     ufw allow 15363/tcp comment "sentinel-dvpn"
     # Allow UDP-WireGuard port
-    ufw allow 15363/tcp comment "sentinel-dvpn"
+    ufw allow 51647/udp comment "sentinel-dvpn"
     
    
     log "Firewall setup completed"
